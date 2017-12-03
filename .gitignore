@@ -10,3 +10,5 @@ _site/
 /.doit.db.bak
 /.doit.db.dat
 /.doit.db.dir
+.ipynb_checkpoints
+
