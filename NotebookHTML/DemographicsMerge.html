@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head><meta charset="utf-8" />
-<title>Scraping</title>
+<title>DemographicsMerge</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.1.10/require.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.0.3/jquery.min.js"></script>
@@ -11746,19 +11746,30 @@ div#notebook {
   <div tabindex="-1" id="notebook" class="border-box-sizing">
     <div class="container" id="notebook-container">
 
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h1 id="Clean-and-Merge-Data">Clean and Merge Data<a class="anchor-link" href="#Clean-and-Merge-Data">&#182;</a></h1><p>This notebook merges the freshly-scraped FBI and American Community Survey (ACS) demographic data to a clean, flat data frame.</p>
+<p>Part 1 reads and merges the ACS data.<br>
+Part 2 reads and does additional cleaning on the FBI data.<br>
+Part 3 merges the two tables on MSA and year, and writes out the final data frame.</p>
+
+</div>
+</div>
+</div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
 <div class="prompt input_prompt">In&nbsp;[1]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="nn">bs4</span>
-<span class="kn">from</span> <span class="nn">IPython.display</span> <span class="k">import</span> <span class="n">IFrame</span><span class="p">,</span> <span class="n">HTML</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="nn">glob</span>
 <span class="kn">import</span> <span class="nn">os</span>
 <span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
-<span class="kn">import</span> <span class="nn">posixpath</span>
 <span class="kn">import</span> <span class="nn">re</span>
-<span class="kn">import</span> <span class="nn">requests</span>
-<span class="kn">from</span> <span class="nn">requests.compat</span> <span class="k">import</span> <span class="n">urljoin</span><span class="p">,</span> <span class="n">urlparse</span>
+<span class="kn">import</span> <span class="nn">csv</span>
+<span class="kn">from</span> <span class="nn">functools</span> <span class="k">import</span> <span class="n">reduce</span>
 </pre></div>
 
 </div>
@@ -11771,21 +11782,7 @@ div#notebook {
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<h1 id="CS-109A/STAT-121A/AC-209A/CSCI-E-109A:-Final">CS 109A/STAT 121A/AC 209A/CSCI E-109A: Final<a class="anchor-link" href="#CS-109A/STAT-121A/AC-209A/CSCI-E-109A:-Final">&#182;</a></h1><p><strong>Harvard University</strong><br/>
-<strong>Fall 2017</strong><br/>
-<strong>Instructors</strong>: Pavlos Protopapas, Kevin Rader, Rahul Dave, Margo Levine</p>
-<hr>
-<p><em>Web scraping component of Crime project.</em></p>
-
-</div>
-</div>
-</div>
-<div class="cell border-box-sizing text_cell rendered">
-<div class="prompt input_prompt">
-</div>
-<div class="inner_cell">
-<div class="text_cell_render border-box-sizing rendered_html">
-<p>In order to develop a predictive model for crime in the US, we must first digest the data available to convert it to a usable, standardized format. Our first goal, then, is to scrape data from UCI crime tables from each yearly report published as html online.</p>
+<h1 id="Part-1---Read-and-Merge-ACS-data">Part 1 - Read and Merge ACS data<a class="anchor-link" href="#Part-1---Read-and-Merge-ACS-data">&#182;</a></h1><p>Unlike the FBI Crime data which was scraped from html tables, the ACS demographic data are available in separate, downloadable tables. To join correctly with the crime statistics we must first read and merge them.</p>
 
 </div>
 </div>
@@ -11795,9 +11792,14 @@ div#notebook {
 <div class="prompt input_prompt">In&nbsp;[2]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">baseurl</span> <span class="o">=</span> <span class="s1">&#39;https://ucr.fbi.gov/ucr-publications&#39;</span>
-<span class="n">req</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">baseurl</span><span class="p">)</span>
-<span class="n">soup</span> <span class="o">=</span> <span class="n">bs4</span><span class="o">.</span><span class="n">BeautifulSoup</span><span class="p">(</span><span class="n">req</span><span class="o">.</span><span class="n">text</span><span class="p">,</span> <span class="s1">&#39;html.parser&#39;</span><span class="p">)</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">years</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;2007&#39;</span><span class="p">,</span> <span class="s1">&#39;2008&#39;</span><span class="p">,</span> <span class="s1">&#39;2009&#39;</span><span class="p">,</span><span class="s1">&#39;2010&#39;</span><span class="p">,</span> <span class="s1">&#39;2011&#39;</span><span class="p">,</span> <span class="s1">&#39;2012&#39;</span><span class="p">,</span> <span class="s1">&#39;2013&#39;</span><span class="p">,</span> <span class="s1">&#39;2014&#39;</span><span class="p">,</span> <span class="s1">&#39;2015&#39;</span><span class="p">,</span> <span class="s1">&#39;2016&#39;</span><span class="p">]</span>
+<span class="n">raw_tables_path</span> <span class="o">=</span> <span class="s1">&#39;data/raw/ACS_2007_2016&#39;</span>
+
+<span class="n">merge_columns</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;MSA&#39;</span><span class="p">,</span> <span class="s1">&#39;year&#39;</span><span class="p">,</span><span class="s1">&#39;MSA_type&#39;</span><span class="p">,</span><span class="s1">&#39;Id&#39;</span><span class="p">,</span> <span class="s1">&#39;Id2&#39;</span><span class="p">,</span><span class="s1">&#39;Geography&#39;</span><span class="p">]</span>
+<span class="n">whitelist_columns</span> <span class="o">=</span> <span class="n">merge_columns</span> <span class="o">+</span> <span class="p">[</span><span class="s1">&#39;Estimate; SEX AND AGE - Median age (years)&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;Estimate; INCOME AND BENEFITS (IN 2016 INFLATION-ADJUSTED DOLLARS) - Total households - Mean household income (dollars)&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;Estimate; INCOME AND BENEFITS (IN 2016 INFLATION-ADJUSTED DOLLARS) - Total households - Median household income (dollars)&#39;</span>
+<span class="p">]</span>
 </pre></div>
 
 </div>
@@ -11810,54 +11812,19 @@ div#notebook {
 <div class="prompt input_prompt">In&nbsp;[3]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># Get links matching a 4-digit year and check if they are for the &quot;Crime in the US&quot; Report</span>
-<span class="n">year_links</span> <span class="o">=</span> <span class="n">soup</span><span class="o">.</span><span class="n">find_all</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="s1">&#39;\d</span><span class="si">{4}</span><span class="s1">&#39;</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;a&#39;</span><span class="p">)</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># Read in the mappings from as-written column names to finalized column names</span>
 
-<span class="c1"># Keep track of the top-level links</span>
-<span class="n">crime_main_urls</span> <span class="o">=</span> <span class="p">[]</span>
-<span class="k">for</span> <span class="n">link</span> <span class="ow">in</span> <span class="n">year_links</span><span class="p">:</span>
-    <span class="k">if</span> <span class="s1">&#39;crime-in-the-u.s&#39;</span> <span class="ow">in</span> <span class="n">link</span><span class="p">[</span><span class="s1">&#39;href&#39;</span><span class="p">]</span> <span class="ow">or</span> <span class="s1">&#39;cius&#39;</span> <span class="ow">in</span> <span class="n">link</span><span class="p">[</span><span class="s1">&#39;href&#39;</span><span class="p">]:</span>
-        <span class="n">crime_main_urls</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">link</span><span class="p">[</span><span class="s1">&#39;href&#39;</span><span class="p">])</span>
-<span class="n">crime_main_urls</span>
+<span class="c1"># We need a separate dictionary for each year becuase &#39;built in 1990&#39; in 2007 maps differently than &#39;built in 1990&#39; in 2016 </span>
+<span class="n">dict_list</span><span class="o">=</span><span class="p">{</span><span class="n">year</span><span class="p">:{}</span> <span class="k">for</span> <span class="n">year</span> <span class="ow">in</span> <span class="n">years</span><span class="p">}</span>
+<span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s1">&#39;data/derived/colnames_final.csv&#39;</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">csvfile</span><span class="p">:</span>
+    <span class="n">csvreader</span> <span class="o">=</span> <span class="n">csv</span><span class="o">.</span><span class="n">reader</span><span class="p">(</span><span class="n">csvfile</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">csvreader</span><span class="p">:</span>
+        <span class="n">final_name</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">year</span><span class="p">,</span> <span class="n">colname</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">years</span><span class="p">,</span> <span class="n">row</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]):</span>
+            <span class="n">dict_list</span><span class="p">[</span><span class="n">year</span><span class="p">][</span><span class="n">colname</span><span class="p">]</span> <span class="o">=</span> <span class="n">final_name</span>
 </pre></div>
 
 </div>
-</div>
-</div>
-
-<div class="output_wrapper">
-<div class="output">
-
-
-<div class="output_area"><div class="prompt output_prompt">Out[3]:</div>
-
-
-<div class="output_text output_subarea output_execute_result">
-<pre>[&#39;https://ucr.fbi.gov/crime-in-the-u.s/2016/crime-in-the-u.s.-2016&#39;,
- &#39;https://ucr.fbi.gov/crime-in-the-u.s/2015/crime-in-the-u.s.-2015&#39;,
- &#39;https://ucr.fbi.gov/crime-in-the-u.s/2014/crime-in-the-u.s.-2014/cius-home&#39;,
- &#39;https://ucr.fbi.gov/crime-in-the-u.s/2013/crime-in-the-u.s.-2013/cius-home&#39;,
- &#39;https://ucr.fbi.gov/crime-in-the-u.s/2012/crime-in-the-u.s.-2012&#39;,
- &#39;https://ucr.fbi.gov/crime-in-the-u.s/2011/crime-in-the-u.s.-2011&#39;,
- &#39;https://ucr.fbi.gov/crime-in-the-u.s/2010/crime-in-the-u.s.-2010&#39;,
- &#39;http://www2.fbi.gov/ucr/cius2009/rankingmessage.htm&#39;,
- &#39;http://www2.fbi.gov/ucr/cius2008/index.html&#39;,
- &#39;http://www2.fbi.gov/ucr/cius2007/index.html&#39;,
- &#39;http://www2.fbi.gov/ucr/cius2006/index.html&#39;,
- &#39;http://www2.fbi.gov/ucr/05cius/&#39;,
- &#39;http://www2.fbi.gov/ucr/cius_04/&#39;,
- &#39;https://ucr.fbi.gov/crime-in-the-u.s/2003&#39;,
- &#39;https://ucr.fbi.gov/crime-in-the-u.s/2002&#39;,
- &#39;https://ucr.fbi.gov/crime-in-the-u.s/2001&#39;,
- &#39;https://ucr.fbi.gov/crime-in-the-u.s/2000&#39;,
- &#39;https://ucr.fbi.gov/crime-in-the-u.s/1999&#39;,
- &#39;https://ucr.fbi.gov/crime-in-the-u.s/1998&#39;,
- &#39;https://ucr.fbi.gov/crime-in-the-u.s/1997&#39;,
- &#39;https://ucr.fbi.gov/crime-in-the-u.s/1996&#39;]</pre>
-</div>
-
-</div>
-
 </div>
 </div>
 
@@ -11867,64 +11834,42 @@ div#notebook {
 <div class="prompt input_prompt">In&nbsp;[4]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="k">def</span> <span class="nf">navigate_to_msa_table</span><span class="p">(</span><span class="n">year_url</span><span class="p">):</span>
-    <span class="sd">&#39;&#39;&#39;Follow a prescribed garden path to find the MSA table url for a given year report&#39;&#39;&#39;</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="c1">#read in a list of ACS data frames, one for each year</span>
 
-    <span class="c1"># Strip the current link to just the home page (special handling of warning)</span>
-    <span class="k">if</span> <span class="n">year_url</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s1">&#39;rankingmessage.htm&#39;</span><span class="p">):</span>
-        <span class="n">year_url</span> <span class="o">=</span> <span class="n">year_url</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;/rankingmessage.htm&#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">year_url</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s1">&#39;index.html&#39;</span><span class="p">):</span>
-        <span class="n">year_url</span> <span class="o">=</span> <span class="n">year_url</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;/index.html&#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">)</span>
+<span class="n">dem_files_byYear</span> <span class="o">=</span> <span class="p">[]</span>
+
+<span class="c1">#loop over years/folders</span>
+<span class="k">for</span> <span class="n">year</span> <span class="ow">in</span> <span class="n">years</span><span class="p">:</span>
+    <span class="c1"># * allows for gziped csv&#39;s </span>
+    <span class="n">dem_files</span> <span class="o">=</span> <span class="n">glob</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">raw_tables_path</span><span class="p">,</span> <span class="n">year</span><span class="p">,</span> <span class="s1">&#39;ACS_*_1YR_*with_ann.csv*&#39;</span><span class="p">))</span>  
+    <span class="n">year_pat</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="s1">r&#39;(\d</span><span class="si">{2}</span><span class="s1">)&#39;</span><span class="p">)</span>
+    <span class="n">dem_df_list</span> <span class="o">=</span> <span class="p">[]</span>
     
-    <span class="c1"># Fetch and parse the page for this year</span>
-    <span class="n">req</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">year_url</span><span class="p">)</span>
-    <span class="n">soup</span> <span class="o">=</span> <span class="n">bs4</span><span class="o">.</span><span class="n">BeautifulSoup</span><span class="p">(</span><span class="n">req</span><span class="o">.</span><span class="n">text</span><span class="p">,</span> <span class="s1">&#39;html.parser&#39;</span><span class="p">)</span>
+    <span class="c1">#loop over the four csvs in each year</span>
+    <span class="k">for</span> <span class="n">fname</span> <span class="ow">in</span> <span class="n">dem_files</span><span class="p">:</span>
+        <span class="c1">#read in one table</span>
+        <span class="n">dem_yr_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="n">skiprows</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">header</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
     
-    <span class="c1"># Pull out the (first) link that mentions Violent Crime and clean the link</span>
-    <span class="n">crime_url</span> <span class="o">=</span> <span class="n">soup</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="n">string</span><span class="o">=</span><span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="s1">&#39;Violent&#39;</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;a&#39;</span><span class="p">)[</span><span class="s1">&#39;href&#39;</span><span class="p">]</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">crime_url</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s1">&#39;http&#39;</span><span class="p">):</span>
-        <span class="n">crime_url</span> <span class="o">=</span> <span class="s1">&#39;/&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="n">year_url</span><span class="p">,</span> <span class="n">crime_url</span><span class="p">])</span>
-    <span class="k">if</span> <span class="n">crime_url</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s1">&#39;index.html&#39;</span><span class="p">):</span>
-        <span class="n">crime_url</span> <span class="o">=</span> <span class="n">crime_url</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;/index.html&#39;</span><span class="p">,</span> <span class="s1">&#39;/&#39;</span><span class="p">)</span>
-    
-    <span class="c1"># Fetch and parse the Violent Crime page</span>
-    <span class="n">req</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">crime_url</span><span class="p">)</span>
-    <span class="n">soup</span> <span class="o">=</span> <span class="n">bs4</span><span class="o">.</span><span class="n">BeautifulSoup</span><span class="p">(</span><span class="n">req</span><span class="o">.</span><span class="n">text</span><span class="p">,</span> <span class="s1">&#39;html.parser&#39;</span><span class="p">)</span>
-    
-    <span class="c1"># Pull out the link for metropolitain statistical areas</span>
-    <span class="n">msa_url</span> <span class="o">=</span> <span class="n">soup</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="n">string</span><span class="o">=</span><span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="s1">&#39;Metropoliti?an Statistical Area&#39;</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;a&#39;</span><span class="p">)[</span><span class="s1">&#39;href&#39;</span><span class="p">]</span>
-    <span class="k">if</span> <span class="n">msa_url</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">):</span>
-        <span class="n">msa_url</span> <span class="o">=</span> <span class="n">crime_url</span> <span class="o">+</span> <span class="n">msa_url</span>
-
-    <span class="k">return</span> <span class="n">resolveComponents</span><span class="p">(</span><span class="n">msa_url</span><span class="p">)</span>
-
-
-<span class="k">def</span> <span class="nf">resolveComponents</span><span class="p">(</span><span class="n">url</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Mostly copied from https://stackoverflow.com/a/4317446/218118</span>
-<span class="sd">    </span>
-<span class="sd">    &gt;&gt;&gt; resolveComponents(&#39;http://www.example.com/foo/bar/../../baz/bux/&#39;)</span>
-<span class="sd">    &#39;http://www.example.com/baz/bux/&#39;</span>
-<span class="sd">    &gt;&gt;&gt; resolveComponents(&#39;http://www.example.com/some/path/../file.ext&#39;)</span>
-<span class="sd">    &#39;http://www.example.com/some/file.ext&#39;</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-
-    <span class="n">parsed</span> <span class="o">=</span> <span class="n">urlparse</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
-    <span class="n">new_path</span> <span class="o">=</span> <span class="n">posixpath</span><span class="o">.</span><span class="n">normpath</span><span class="p">(</span><span class="n">parsed</span><span class="o">.</span><span class="n">path</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">parsed</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s1">&#39;/&#39;</span><span class="p">):</span>
-        <span class="c1"># Compensate for issue1707768</span>
-        <span class="n">new_path</span> <span class="o">+=</span> <span class="s1">&#39;/&#39;</span>
-    <span class="n">cleaned</span> <span class="o">=</span> <span class="n">parsed</span><span class="o">.</span><span class="n">_replace</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="n">new_path</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">cleaned</span><span class="o">.</span><span class="n">geturl</span><span class="p">()</span>
-
-<span class="n">msa_urls</span> <span class="o">=</span> <span class="p">[]</span>
-
-<span class="k">for</span> <span class="n">year_url</span> <span class="ow">in</span> <span class="n">crime_main_urls</span><span class="p">:</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">msa_urls</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">navigate_to_msa_table</span><span class="p">(</span><span class="n">year_url</span><span class="p">))</span>
-    <span class="k">except</span> <span class="ne">TypeError</span><span class="p">:</span>
-        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;-&#39;</span><span class="o">*</span><span class="mi">10</span> <span class="o">+</span> <span class="s1">&#39; Error with top-level url - </span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">year_url</span><span class="p">))</span>
-<span class="n">msa_urls</span>
+        <span class="c1">#add derived columns</span>
+        <span class="n">dem_yr_df</span><span class="p">[</span><span class="s1">&#39;year&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">year</span><span class="p">)</span>
+        <span class="n">dem_yr_df</span><span class="p">[[</span><span class="s1">&#39;MSA&#39;</span><span class="p">,</span> <span class="s1">&#39;MSA_type&#39;</span><span class="p">]]</span> <span class="o">=</span> <span class="n">dem_yr_df</span><span class="p">[</span><span class="s1">&#39;Geography&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">extract</span><span class="p">(</span><span class="s1">r&#39;(^.*)\ (M.*)$&#39;</span><span class="p">)</span>
+        
+        <span class="c1">#rename all columns to a standard naming format</span>
+        <span class="n">dem_yr_df</span><span class="o">.</span><span class="n">rename_axis</span><span class="p">(</span><span class="n">dict_list</span><span class="p">[</span><span class="n">year</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        
+        <span class="c1">#drop any column that isn&#39;t a percent or whitelisted</span>
+        <span class="n">bad_col_names</span> <span class="o">=</span> <span class="p">[</span><span class="n">x</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">dem_yr_df</span><span class="o">.</span><span class="n">columns</span><span class="o">.</span><span class="n">values</span> <span class="k">if</span> <span class="s1">&#39;Percent;&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">x</span> <span class="ow">and</span> <span class="n">x</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">whitelist_columns</span><span class="p">]</span>
+        <span class="n">dem_yr_df</span> <span class="o">=</span> <span class="n">dem_yr_df</span><span class="p">[</span><span class="n">dem_yr_df</span><span class="o">.</span><span class="n">columns</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">bad_col_names</span><span class="p">)]</span>
+        
+        <span class="c1">#drop any margin of error columns</span>
+        <span class="n">dem_yr_df</span> <span class="o">=</span> <span class="n">dem_yr_df</span><span class="p">[</span><span class="n">dem_yr_df</span><span class="o">.</span><span class="n">columns</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">dem_yr_df</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">regex</span><span class="o">=</span><span class="s1">&#39;Margin of Error&#39;</span><span class="p">)))]</span>
+        
+        <span class="c1">#store the cleaned table</span>
+        <span class="n">dem_df_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">dem_yr_df</span><span class="p">)</span>
+    <span class="c1">#smush together all tables for this year</span>
+    <span class="n">dem_year</span> <span class="o">=</span> <span class="n">reduce</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">on</span> <span class="o">=</span> <span class="n">merge_columns</span><span class="p">),</span> <span class="n">dem_df_list</span><span class="p">)</span>
+    <span class="n">dem_files_byYear</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">dem_year</span><span class="p">)</span>
+<span class="n">dem_year</span><span class="o">.</span><span class="n">shape</span>
 </pre></div>
 
 </div>
@@ -11936,17 +11881,8 @@ div#notebook {
 
 
 <div class="output_area"><div class="prompt"></div>
-<div class="output_subarea output_stream output_stdout output_text">
-<pre>---------- Error with top-level url - http://www2.fbi.gov/ucr/05cius/
----------- Error with top-level url - http://www2.fbi.gov/ucr/cius_04/
----------- Error with top-level url - https://ucr.fbi.gov/crime-in-the-u.s/2003
----------- Error with top-level url - https://ucr.fbi.gov/crime-in-the-u.s/2002
----------- Error with top-level url - https://ucr.fbi.gov/crime-in-the-u.s/2001
----------- Error with top-level url - https://ucr.fbi.gov/crime-in-the-u.s/2000
----------- Error with top-level url - https://ucr.fbi.gov/crime-in-the-u.s/1999
----------- Error with top-level url - https://ucr.fbi.gov/crime-in-the-u.s/1998
----------- Error with top-level url - https://ucr.fbi.gov/crime-in-the-u.s/1997
----------- Error with top-level url - https://ucr.fbi.gov/crime-in-the-u.s/1996
+<div class="output_subarea output_stream output_stderr output_text">
+<pre>/Users/kastman/miniconda/envs/py35/lib/python3.5/site-packages/ipykernel/__main__.py:19: FutureWarning: currently extract(expand=None) means expand=False (return Index/Series/DataFrame) but in a future version of pandas this will be changed to expand=True (return DataFrame)
 </pre>
 </div>
 </div>
@@ -11955,17 +11891,7 @@ div#notebook {
 
 
 <div class="output_text output_subarea output_execute_result">
-<pre>[&#39;https://ucr.fbi.gov/crime-in-the-u.s/2016/crime-in-the-u.s.-2016/tables/table-4&#39;,
- &#39;https://ucr.fbi.gov/crime-in-the-u.s/2015/crime-in-the-u.s.-2015/tables/table-6&#39;,
- &#39;https://ucr.fbi.gov/crime-in-the-u.s/2014/crime-in-the-u.s.-2014/tables/table-6&#39;,
- &#39;https://ucr.fbi.gov/crime-in-the-u.s/2013/crime-in-the-u.s.-2013/tables/6tabledatadecpdf/table-6&#39;,
- &#39;https://ucr.fbi.gov/crime-in-the-u.s/2012/crime-in-the-u.s.-2012/tables/6tabledatadecpdf&#39;,
- &#39;https://ucr.fbi.gov/crime-in-the-u.s/2011/crime-in-the-u.s.-2011/tables/table-6&#39;,
- &#39;https://ucr.fbi.gov/crime-in-the-u.s/2010/crime-in-the-u.s.-2010/tables/table-6&#39;,
- &#39;http://www2.fbi.gov/ucr/cius2009/data/table_06.html&#39;,
- &#39;http://www2.fbi.gov/ucr/cius2008/data/table_06.html&#39;,
- &#39;http://www2.fbi.gov/ucr/cius2007/data/table_06.html&#39;,
- &#39;http://www2.fbi.gov/ucr/cius2006/data/table_06.html&#39;]</pre>
+<pre>(511, 525)</pre>
 </div>
 
 </div>
@@ -11973,193 +11899,21 @@ div#notebook {
 </div>
 </div>
 
-</div>
-<div class="cell border-box-sizing text_cell rendered">
-<div class="prompt input_prompt">
-</div>
-<div class="inner_cell">
-<div class="text_cell_render border-box-sizing rendered_html">
-<p>Now that we have links to the report tables for each year, parse them to grab relevant details. The format of the table is actually variable, but in general:</p>
-<ul>
-<li>"Major" rows are 1 per MSA. This takes many differnt forms in the html. </li>
-</ul>
-<p>Per MSA:</p>
-<ul>
-<li>Row 1: the header (MSA name) and total population</li>
-<li>Row 2: Empty except counties' names in column 2 (but this changes depending on format of html headers)</li>
-<li>Row 3-X: full stats for major cities (one row per city)</li>
-<li>4 (generally): full stats for total reporting</li>
-<li>5 (when not 100% fully reporting): full stats for estimated 100% reporting</li>
-<li>5: Normalized rate per 100,000 of total reporting</li>
-</ul>
-
-</div>
-</div>
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
 <div class="prompt input_prompt">In&nbsp;[5]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">year_pat</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="s1">&#39;(\d</span><span class="si">{4}</span><span class="s1">)&#39;</span><span class="p">)</span>
-<span class="k">def</span> <span class="nf">parse_msa_table</span><span class="p">(</span><span class="n">table_url</span><span class="p">):</span>
-    <span class="c1"># Retrieve the table</span>
-    <span class="n">req</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">table_url</span><span class="p">)</span>
-    <span class="n">soup</span> <span class="o">=</span> <span class="n">bs4</span><span class="o">.</span><span class="n">BeautifulSoup</span><span class="p">(</span><span class="n">req</span><span class="o">.</span><span class="n">text</span><span class="p">,</span> <span class="s1">&#39;html.parser&#39;</span><span class="p">)</span>
-    <span class="n">tab1</span> <span class="o">=</span> <span class="n">soup</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;table&#39;</span><span class="p">,</span> <span class="n">class_</span><span class="o">=</span><span class="s1">&#39;data&#39;</span><span class="p">)</span>
-    
-    <span class="c1"># Extract column names. There are lots of &quot;presentation&quot; tricks that the html reports&#39;</span>
-    <span class="c1"># developers used (including spaces and new-line characters in the column headers) that</span>
-    <span class="c1"># are interpreted strangely by the beautifulsoup parser and must be normalized;</span>
-    <span class="c1"># otherwise columns that appear to be identical strings are actually saved separately.</span>
-    <span class="n">header_cells</span> <span class="o">=</span> <span class="n">tab1</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s1">&#39;thead&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">find_all</span><span class="p">(</span><span class="s1">&#39;th&#39;</span><span class="p">)[</span><span class="mi">1</span><span class="p">:]</span>
-    <span class="n">table_cols</span> <span class="o">=</span> <span class="p">[</span><span class="n">re</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="s1">&#39;\s+&#39;</span><span class="p">,</span> <span class="s1">&#39; &#39;</span><span class="p">,</span> <span class="n">t</span><span class="o">.</span><span class="n">get_text</span><span class="p">(</span><span class="n">separator</span><span class="o">=</span><span class="s1">&#39; &#39;</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">())</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">header_cells</span><span class="p">]</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># Vertically concatenate each year&#39;s combined table so we have one final ACS data file</span>
+<span class="n">dem_df</span> <span class="o">=</span> <span class="n">dem_files_byYear</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+<span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="nb">len</span><span class="p">(</span><span class="n">dem_files_byYear</span><span class="p">)):</span>
+    <span class="c1">#append stacks columns with the same name and introduces NAs for new or vansishing columns.</span>
+    <span class="c1">#net: we get the uninon of all columns in any individual year, with appropriate NAs for years missing a column</span>
+    <span class="n">dem_df</span> <span class="o">=</span> <span class="n">dem_df</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">dem_files_byYear</span><span class="p">[</span><span class="n">x</span><span class="p">])</span>
 
-    <span class="c1"># Parse the MSA info and create a dataframe</span>
-    <span class="n">rows</span> <span class="o">=</span> <span class="n">tab1</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s1">&#39;tbody&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">find_all</span><span class="p">(</span><span class="s1">&#39;tr&#39;</span><span class="p">)</span>
-    <span class="n">msa_list</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">current_msa</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">:</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="n">current_msa</span> <span class="o">=</span> <span class="n">parse_msa_row</span><span class="p">(</span><span class="n">row</span><span class="p">,</span> <span class="n">current_msa</span><span class="p">,</span> <span class="n">msa_list</span><span class="p">,</span> <span class="n">table_cols</span><span class="p">)</span> 
-        <span class="k">except</span> <span class="ne">TypeError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-            <span class="c1"># Some rows are empty, containing only empty tds with no th cells.</span>
-            <span class="c1"># Continue to the next row in that case.</span>
-            <span class="nb">print</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
-            <span class="k">continue</span>
-
-
-    <span class="c1"># Combine each MSA&#39;s stats into a single large dataframe</span>
-    <span class="n">all_msa_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">msa_list</span><span class="p">)</span>
-
-    <span class="c1"># Read the year from the url and add it to the df</span>
-    <span class="n">year</span> <span class="o">=</span> <span class="n">year_pat</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">table_url</span><span class="p">)</span><span class="o">.</span><span class="n">groups</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
-    <span class="n">all_msa_df</span><span class="p">[</span><span class="s1">&#39;year&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">year</span>
-    <span class="n">all_msa_df</span> <span class="o">=</span> <span class="n">all_msa_df</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">pd</span><span class="o">.</span><span class="n">to_numeric</span><span class="p">,</span><span class="n">errors</span><span class="o">=</span><span class="s1">&#39;ignore&#39;</span><span class="p">)</span>
-    
-    <span class="c1"># Collapse and rename some known problem columns (inconsistent across years)</span>
-    <span class="n">sanitize_columns</span><span class="p">(</span><span class="n">all_msa_df</span><span class="p">,</span> <span class="s1">&#39;Larceny&#39;</span><span class="p">,</span> <span class="s1">&#39;Larceny&#39;</span><span class="p">)</span>
-    <span class="n">sanitize_columns</span><span class="p">(</span><span class="n">all_msa_df</span><span class="p">,</span> <span class="s1">&#39;Rape&#39;</span><span class="p">,</span> <span class="s1">&#39;Rape&#39;</span><span class="p">)</span>
-
-    <span class="k">return</span> <span class="n">all_msa_df</span>
-
-
-<span class="k">def</span> <span class="nf">sanitize_columns</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">query_label</span><span class="p">,</span> <span class="n">new_column_label</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
-    <span class="sd">&#39;&#39;&#39;Search for a column and rename it to a new saner column name&#39;&#39;&#39;</span>
-    <span class="n">cols</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">columns</span>
-    <span class="n">query_cols</span> <span class="o">=</span> <span class="n">cols</span><span class="p">[</span><span class="n">cols</span><span class="o">.</span><span class="n">to_series</span><span class="p">()</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">contains</span><span class="p">(</span><span class="n">query_label</span><span class="p">,</span> <span class="n">case</span><span class="o">=</span><span class="kc">False</span><span class="p">)]</span>
-    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">query_cols</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
-        <span class="n">len_msg</span> <span class="o">=</span> <span class="p">(</span><span class="s1">&#39;Unexpected columns found - should only have one </span><span class="si">{}</span><span class="s1"> &#39;</span>
-                   <span class="s1">&#39;column, but got </span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">query_label</span><span class="p">,</span> <span class="s1">&#39;, &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">query_cols</span><span class="p">)))</span>
-        <span class="k">raise</span> <span class="n">StandardError</span><span class="p">(</span><span class="n">len_msg</span><span class="p">)</span>
-    <span class="n">query_col</span> <span class="o">=</span> <span class="n">query_cols</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-    <span class="n">updated</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">{</span><span class="n">query_col</span><span class="p">:</span> <span class="n">new_column_label</span><span class="p">},</span> <span class="n">inplace</span><span class="o">=</span><span class="n">inplace</span><span class="p">)</span>
-    
-    <span class="c1"># Updated contains the return value of df.rename, which will be either</span>
-    <span class="c1"># the new dataframe or None depending on the value of inplace</span>
-    <span class="k">return</span> <span class="n">updated</span>
-
-
-<span class="k">def</span> <span class="nf">parse_msa_row</span><span class="p">(</span><span class="n">row</span><span class="p">,</span> <span class="n">current_msa</span><span class="p">,</span> <span class="n">msa_list</span><span class="p">,</span> <span class="n">table_cols</span><span class="p">):</span>
-    <span class="sd">&#39;&#39;&#39;Parse a row and adjust the current msa as appropriate.</span>
-<span class="sd">    </span>
-<span class="sd">    Since the MSA object is really a set of rows, and those rows aren&#39;t well defined (MDs) interspersed,</span>
-<span class="sd">    the row parser needs the current row, the current msa (to adjust attributes), and the list of </span>
-<span class="sd">    all MSAs (MSA dicts are only added to the list when the previous MSA has been completed and a new</span>
-<span class="sd">    header has been found). Updates MSA list and current MSA in place; returns None &#39;&#39;&#39;</span>
-    <span class="n">row_type</span> <span class="o">=</span> <span class="n">determine_row_type</span><span class="p">(</span><span class="n">row</span><span class="p">)</span>
-    
-    <span class="k">if</span> <span class="n">row_type</span> <span class="o">==</span> <span class="s1">&#39;header&#39;</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">current_msa</span><span class="p">:</span>
-            <span class="n">msa_df</span> <span class="o">=</span> <span class="n">msa_to_df</span><span class="p">(</span><span class="n">current_msa</span><span class="p">,</span> <span class="n">table_cols</span><span class="p">)</span>
-            <span class="n">msa_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">msa_df</span><span class="p">)</span>
-        <span class="n">current_msa</span> <span class="o">=</span> <span class="n">parse_header_row</span><span class="p">(</span><span class="n">row</span><span class="p">)</span>
-    <span class="k">elif</span> <span class="n">row_type</span> <span class="o">==</span> <span class="s1">&#39;county_list&#39;</span><span class="p">:</span>
-        <span class="n">counties</span> <span class="o">=</span> <span class="n">parse_county_row</span><span class="p">(</span><span class="n">row</span><span class="p">)</span>
-        <span class="n">current_msa</span><span class="p">[</span><span class="s1">&#39;counties&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">counties</span>
-    <span class="k">elif</span> <span class="n">row_type</span> <span class="o">==</span> <span class="s1">&#39;table_row&#39;</span><span class="p">:</span>
-        <span class="n">counts</span> <span class="o">=</span> <span class="n">parse_numerical_row</span><span class="p">(</span><span class="n">row</span><span class="p">)</span>
-        <span class="n">current_msa</span><span class="p">[</span><span class="s1">&#39;counts&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">counts</span><span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="n">StandardError</span><span class="p">(</span><span class="s1">&#39;Unrecognized row type: </span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">row_type</span><span class="p">))</span>
-    <span class="k">return</span> <span class="n">current_msa</span>
-
-
-<span class="k">def</span> <span class="nf">determine_row_type</span><span class="p">(</span><span class="n">row</span><span class="p">):</span>
-    <span class="sd">&#39;&#39;&#39;Scan a html row and determine which function should parse it.</span>
-<span class="sd">    </span>
-<span class="sd">    Primary row types:</span>
-<span class="sd">    - </span>
-<span class="sd">    - </span>
-<span class="sd">    &#39;&#39;&#39;</span>
-    <span class="n">th</span> <span class="o">=</span> <span class="n">row</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s1">&#39;th&#39;</span><span class="p">)</span>
-    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">th</span><span class="p">[</span><span class="s1">&#39;class&#39;</span><span class="p">]):</span>
-        <span class="k">if</span> <span class="n">in_list</span><span class="p">(</span><span class="n">th</span><span class="p">[</span><span class="s1">&#39;class&#39;</span><span class="p">],</span> <span class="p">[</span><span class="s1">&#39;subguide1&#39;</span><span class="p">,</span> <span class="s1">&#39;subguide2&#39;</span><span class="p">,</span> <span class="s1">&#39;group0&#39;</span><span class="p">])</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">th</span><span class="o">.</span><span class="n">text</span><span class="o">.</span><span class="n">strip</span><span class="p">()):</span>
-            <span class="c1"># subguide1 is for MSA; subguide2 is for MD (Metropolitan Division), smaller breakdowns of MSAs</span>
-            <span class="c1"># In later years, &quot;groupN&quot; is the 0-indexed column number. Group 0 is the first column, or header</span>
-            <span class="c1"># In 2010, a th in col0 appears for some numeric columns.</span>
-            <span class="n">row_type</span> <span class="o">=</span> <span class="s1">&#39;header&#39;</span>
-        <span class="c1"># Check if any item in the header&#39;s classes is a member of the following header groups</span>
-        <span class="c1"># This list comprehension is the fastest way to check intersection</span>
-        <span class="k">else</span><span class="p">:</span>  <span class="c1"># in_list(th[&#39;class&#39;], [&#39;subguide1e&#39;, &#39;group1&#39;]):</span>
-            <span class="k">if</span> <span class="s1">&#39;Includes&#39;</span> <span class="ow">in</span> <span class="n">th</span><span class="o">.</span><span class="n">text</span> <span class="ow">or</span> <span class="s1">&#39;Includes&#39;</span> <span class="ow">in</span> <span class="n">row</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s1">&#39;td&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">text</span><span class="p">:</span>
-                <span class="n">row_type</span> <span class="o">=</span> <span class="s1">&#39;county_list&#39;</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">row_type</span> <span class="o">=</span> <span class="s1">&#39;table_row&#39;</span>
-    <span class="k">return</span> <span class="n">row_type</span>
-
-
-<span class="k">def</span> <span class="nf">in_list</span><span class="p">(</span><span class="n">query_list</span><span class="p">,</span> <span class="n">target_list</span><span class="p">):</span>
-    <span class="sd">&#39;&#39;&#39;Return True if any member of ListA is in ListB&#39;&#39;&#39;</span>
-    <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="nb">list</span><span class="p">([</span><span class="n">i</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">query_list</span> <span class="k">if</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">target_list</span><span class="p">])))</span>
-
-
-<span class="k">def</span> <span class="nf">parse_header_row</span><span class="p">(</span><span class="n">row</span><span class="p">):</span>
-    <span class="n">th</span> <span class="o">=</span> <span class="n">row</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s1">&#39;th&#39;</span><span class="p">)</span>
-    <span class="n">msa_label</span> <span class="o">=</span> <span class="n">th</span><span class="o">.</span><span class="n">text</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">pop_idx</span> <span class="o">=</span> <span class="mi">0</span>
-        <span class="n">msa_pop</span> <span class="o">=</span> <span class="n">parse_pop</span><span class="p">(</span><span class="n">row</span><span class="p">,</span> <span class="n">pop_idx</span><span class="p">)</span>
-    <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
-        <span class="n">pop_idx</span> <span class="o">=</span> <span class="mi">1</span>
-        <span class="n">msa_pop</span> <span class="o">=</span> <span class="n">parse_pop</span><span class="p">(</span><span class="n">row</span><span class="p">,</span> <span class="n">pop_idx</span><span class="p">)</span>
-
-    <span class="n">new_msa</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">msa_label</span><span class="o">=</span><span class="n">msa_label</span><span class="p">,</span> <span class="n">msa_pop</span><span class="o">=</span><span class="n">msa_pop</span><span class="p">,</span> <span class="n">counts</span><span class="o">=</span><span class="p">[])</span>
-    <span class="k">return</span> <span class="n">new_msa</span>
-
-
-<span class="k">def</span> <span class="nf">parse_pop</span><span class="p">(</span><span class="n">row</span><span class="p">,</span> <span class="n">pop_idx</span><span class="p">):</span>
-    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">find_all</span><span class="p">(</span><span class="s1">&#39;td&#39;</span><span class="p">)[</span><span class="n">pop_idx</span><span class="p">]</span><span class="o">.</span><span class="n">text</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;,&#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">))</span>
-
-
-<span class="k">def</span> <span class="nf">parse_county_row</span><span class="p">(</span><span class="n">row</span><span class="p">):</span>
-    <span class="n">counties</span> <span class="o">=</span> <span class="n">row</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s1">&#39;th&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">text</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
-    <span class="k">return</span> <span class="n">counties</span>
-
-
-<span class="k">def</span> <span class="nf">parse_numerical_row</span><span class="p">(</span><span class="n">row</span><span class="p">):</span>
-    <span class="n">label</span> <span class="o">=</span> <span class="n">row</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s1">&#39;th&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">text</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
-    <span class="n">cols</span> <span class="o">=</span> <span class="p">[</span><span class="n">column_value</span><span class="o">.</span><span class="n">text</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;,&#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;%&#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="k">for</span> <span class="n">column_value</span> <span class="ow">in</span> <span class="n">row</span><span class="o">.</span><span class="n">find_all</span><span class="p">(</span><span class="s1">&#39;td&#39;</span><span class="p">)]</span>
-    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">find_all</span><span class="p">(</span><span class="s1">&#39;th&#39;</span><span class="p">))</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
-        <span class="n">cols</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">)</span>
-    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">label</span><span class="p">):</span>
-        <span class="n">cols</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">label</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">cols</span>
-
-
-<span class="k">def</span> <span class="nf">msa_to_df</span><span class="p">(</span><span class="n">current_msa</span><span class="p">,</span> <span class="n">table_cols</span><span class="p">):</span>
-    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">([</span><span class="n">c</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">current_msa</span><span class="p">[</span><span class="s1">&#39;counts&#39;</span><span class="p">]],</span> <span class="n">columns</span><span class="o">=</span><span class="n">table_cols</span><span class="p">)</span>
-    <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">set</span><span class="p">(</span><span class="n">current_msa</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span> <span class="o">-</span> <span class="nb">set</span><span class="p">([</span><span class="s1">&#39;counts&#39;</span><span class="p">]):</span>
-        <span class="n">df</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">current_msa</span><span class="p">[</span><span class="n">k</span><span class="p">]</span>
-    <span class="k">return</span> <span class="n">df</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">pd</span><span class="o">.</span><span class="n">to_numeric</span><span class="p">,</span><span class="n">errors</span><span class="o">=</span><span class="s1">&#39;ignore&#39;</span><span class="p">)</span>
-
-<span class="n">msa_dfs</span> <span class="o">=</span> <span class="p">[]</span>
-<span class="k">for</span> <span class="n">url</span> <span class="ow">in</span> <span class="n">msa_urls</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
-    <span class="n">msa_dfs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">parse_msa_table</span><span class="p">(</span><span class="n">url</span><span class="p">))</span>
-
-<span class="n">all_year_dfs</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">msa_dfs</span><span class="p">,</span> <span class="n">ignore_index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<span class="n">all_year_dfs</span><span class="o">.</span><span class="n">describe</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">dem_df</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+<span class="n">dem_df</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
 </pre></div>
 
 </div>
@@ -12172,18 +11926,7 @@ div#notebook {
 
 <div class="output_area"><div class="prompt"></div>
 <div class="output_subarea output_stream output_stdout output_text">
-<pre>https://ucr.fbi.gov/crime-in-the-u.s/2016/crime-in-the-u.s.-2016/tables/table-4
-https://ucr.fbi.gov/crime-in-the-u.s/2015/crime-in-the-u.s.-2015/tables/table-6
-https://ucr.fbi.gov/crime-in-the-u.s/2014/crime-in-the-u.s.-2014/tables/table-6
-https://ucr.fbi.gov/crime-in-the-u.s/2013/crime-in-the-u.s.-2013/tables/6tabledatadecpdf/table-6
-https://ucr.fbi.gov/crime-in-the-u.s/2012/crime-in-the-u.s.-2012/tables/6tabledatadecpdf
-https://ucr.fbi.gov/crime-in-the-u.s/2011/crime-in-the-u.s.-2011/tables/table-6
-https://ucr.fbi.gov/crime-in-the-u.s/2010/crime-in-the-u.s.-2010/tables/table-6
-http://www2.fbi.gov/ucr/cius2009/data/table_06.html
-http://www2.fbi.gov/ucr/cius2008/data/table_06.html
-&#39;NoneType&#39; object is not subscriptable
-http://www2.fbi.gov/ucr/cius2007/data/table_06.html
-http://www2.fbi.gov/ucr/cius2006/data/table_06.html
+<pre>(5107, 548)
 </pre>
 </div>
 </div>
@@ -12192,160 +11935,109 @@ http://www2.fbi.gov/ucr/cius2006/data/table_06.html
 
 <div class="output_html rendered_html output_subarea output_execute_result">
 <div>
-<style>
-    .dataframe thead tr:only-child th {
-        text-align: right;
-    }
-
-    .dataframe thead th {
-        text-align: left;
-    }
-
-    .dataframe tbody tr th {
-        vertical-align: top;
-    }
-</style>
 <table border="1" class="dataframe">
   <thead>
     <tr style="text-align: right;">
       <th></th>
-      <th>Aggravated assault</th>
-      <th>Burglary</th>
-      <th>Larceny</th>
-      <th>Motor vehicle theft</th>
-      <th>Murder and nonnegligent manslaughter</th>
-      <th>Population</th>
-      <th>Property crime</th>
-      <th>Rape</th>
-      <th>Robbery</th>
-      <th>Violent crime</th>
-      <th>msa_pop</th>
+      <th>Estimate; INCOME AND BENEFITS (IN 2016 INFLATION-ADJUSTED DOLLARS) - Total households - Mean household income (dollars)</th>
+      <th>Estimate; INCOME AND BENEFITS (IN 2016 INFLATION-ADJUSTED DOLLARS) - Total households - Median household income (dollars)</th>
+      <th>Estimate; SEX AND AGE - Median age (years)</th>
+      <th>Geography</th>
+      <th>Id</th>
+      <th>Id2</th>
+      <th>MSA</th>
+      <th>MSA_type</th>
+      <th>Percent; ANCESTRY - Total population</th>
+      <th>Percent; ANCESTRY - Total population - American</th>
+      <th>...</th>
+      <th>Percent; YEAR STRUCTURE BUILT - Total housing units - Built 1940 to 1949</th>
+      <th>Percent; YEAR STRUCTURE BUILT - Total housing units - Built 1950 to 1959</th>
+      <th>Percent; YEAR STRUCTURE BUILT - Total housing units - Built 1960 to 1969</th>
+      <th>Percent; YEAR STRUCTURE BUILT - Total housing units - Built 1970 to 1979</th>
+      <th>Percent; YEAR STRUCTURE BUILT - Total housing units - Built 1980 to 1989</th>
+      <th>Percent; YEAR STRUCTURE BUILT - Total housing units - Built 1990 to 1999</th>
+      <th>Percent; YEAR STRUCTURE BUILT - Total housing units - Built 2000 to 2009</th>
+      <th>Percent; YEAR STRUCTURE BUILT - Total housing units - Built 2010 to 2013</th>
+      <th>Percent; YEAR STRUCTURE BUILT - Total housing units - Built 2014 or later</th>
       <th>year</th>
     </tr>
   </thead>
   <tbody>
     <tr>
-      <th>count</th>
-      <td>16092.000000</td>
-      <td>16146.000000</td>
-      <td>16136.000000</td>
-      <td>16187.000000</td>
-      <td>16258.000000</td>
-      <td>1.215500e+04</td>
-      <td>15976.000000</td>
-      <td>16015.000000</td>
-      <td>16255.000000</td>
-      <td>15865.000000</td>
-      <td>1.626200e+04</td>
-      <td>16262.000000</td>
+      <th>0</th>
+      <td>52781</td>
+      <td>42402</td>
+      <td>39.7</td>
+      <td>Aberdeen, WA Micro Area</td>
+      <td>3100000US10140</td>
+      <td>10140</td>
+      <td>Aberdeen, WA</td>
+      <td>Micro Area</td>
+      <td>100</td>
+      <td>3.6</td>
+      <td>...</td>
+      <td>27.4</td>
+      <td>4.8</td>
+      <td>6.7</td>
+      <td>13.3</td>
+      <td>20.1</td>
+      <td>12.7</td>
+      <td>9.6</td>
+      <td>3.6</td>
+      <td>1.9</td>
+      <td>2007</td>
     </tr>
     <tr>
-      <th>mean</th>
-      <td>1129.884004</td>
-      <td>2686.503029</td>
-      <td>8598.836211</td>
-      <td>1258.153870</td>
-      <td>24.734279</td>
-      <td>8.436747e+04</td>
-      <td>12415.848579</td>
-      <td>129.201611</td>
-      <td>659.827579</td>
-      <td>1919.413508</td>
-      <td>1.305731e+06</td>
-      <td>2011.046796</td>
+      <th>1</th>
+      <td>51693</td>
+      <td>39369</td>
+      <td>34.9</td>
+      <td>Abilene, TX Metro Area</td>
+      <td>3100000US10180</td>
+      <td>10180</td>
+      <td>Abilene, TX</td>
+      <td>Metro Area</td>
+      <td>100</td>
+      <td>6.9</td>
+      <td>...</td>
+      <td>9.5</td>
+      <td>7.0</td>
+      <td>19.8</td>
+      <td>11.8</td>
+      <td>15.5</td>
+      <td>16.8</td>
+      <td>9.6</td>
+      <td>6.5</td>
+      <td>3.4</td>
+      <td>2007</td>
     </tr>
     <tr>
-      <th>std</th>
-      <td>3142.516418</td>
-      <td>6228.532730</td>
-      <td>20757.650086</td>
-      <td>3824.970104</td>
-      <td>74.903191</td>
-      <td>3.182271e+05</td>
-      <td>30048.212887</td>
-      <td>293.164424</td>
-      <td>2297.988234</td>
-      <td>5627.500873</td>
-      <td>2.620349e+06</td>
-      <td>3.143743</td>
-    </tr>
-    <tr>
-      <th>min</th>
-      <td>0.000000</td>
-      <td>4.000000</td>
-      <td>6.000000</td>
-      <td>0.000000</td>
-      <td>0.000000</td>
-      <td>7.520000e+01</td>
-      <td>94.000000</td>
-      <td>0.000000</td>
-      <td>0.000000</td>
-      <td>1.000000</td>
-      <td>3.315600e+04</td>
-      <td>2006.000000</td>
-    </tr>
-    <tr>
-      <th>25%</th>
-      <td>145.200000</td>
-      <td>446.125000</td>
-      <td>1664.150000</td>
-      <td>115.000000</td>
-      <td>2.000000</td>
-      <td>1.000000e+02</td>
-      <td>2312.450000</td>
-      <td>22.700000</td>
-      <td>48.000000</td>
-      <td>240.800000</td>
-      <td>1.541390e+05</td>
-      <td>2008.000000</td>
-    </tr>
-    <tr>
-      <th>50%</th>
-      <td>292.500000</td>
-      <td>815.950000</td>
-      <td>2536.150000</td>
-      <td>236.000000</td>
-      <td>5.000000</td>
-      <td>1.874200e+04</td>
-      <td>3622.700000</td>
-      <td>41.000000</td>
-      <td>106.000000</td>
-      <td>454.000000</td>
-      <td>3.370110e+05</td>
-      <td>2011.000000</td>
-    </tr>
-    <tr>
-      <th>75%</th>
-      <td>709.000000</td>
-      <td>1888.000000</td>
-      <td>5824.500000</td>
-      <td>615.000000</td>
-      <td>13.000000</td>
-      <td>7.607900e+04</td>
-      <td>8239.250000</td>
-      <td>95.150000</td>
-      <td>296.950000</td>
-      <td>1127.000000</td>
-      <td>1.006870e+06</td>
-      <td>2014.000000</td>
-    </tr>
-    <tr>
-      <th>max</th>
-      <td>44100.000000</td>
-      <td>68227.000000</td>
-      <td>264374.000000</td>
-      <td>75245.000000</td>
-      <td>1092.000000</td>
-      <td>8.566917e+06</td>
-      <td>357850.000000</td>
-      <td>4968.000000</td>
-      <td>37129.000000</td>
-      <td>82359.000000</td>
-      <td>2.017799e+07</td>
-      <td>2016.000000</td>
+      <th>2</th>
+      <td>59453</td>
+      <td>50240</td>
+      <td>37.7</td>
+      <td>Adrian, MI Micro Area</td>
+      <td>3100000US10300</td>
+      <td>10300</td>
+      <td>Adrian, MI</td>
+      <td>Micro Area</td>
+      <td>100</td>
+      <td>7.0</td>
+      <td>...</td>
+      <td>25.6</td>
+      <td>5.5</td>
+      <td>12.7</td>
+      <td>8.0</td>
+      <td>14.9</td>
+      <td>9.1</td>
+      <td>13.8</td>
+      <td>8.2</td>
+      <td>2.2</td>
+      <td>2007</td>
     </tr>
   </tbody>
 </table>
+<p>3 rows × 548 columns</p>
 </div>
 </div>
 
@@ -12360,8 +12052,33 @@ http://www2.fbi.gov/ucr/cius2006/data/table_06.html
 <div class="prompt input_prompt">In&nbsp;[6]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="n">all_year_dfs</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
-<span class="n">all_year_dfs</span><span class="o">.</span><span class="n">head</span><span class="p">()</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># save the ACS df</span>
+<span class="n">dem_df</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="s1">&#39;data/derived/allDem_df.csv&#39;</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h1 id="Part-2---Load-and-clean-crime-data">Part 2 - Load and clean crime data<a class="anchor-link" href="#Part-2---Load-and-clean-crime-data">&#182;</a></h1>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[7]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># load crime data</span>
+<span class="n">all_year_dfs</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s1">&#39;data/derived/AC209_RawScraped.csv&#39;</span><span class="p">,</span> <span class="n">index_col</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">all_year_dfs</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+<span class="n">all_year_dfs</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
 </pre></div>
 
 </div>
@@ -12379,23 +12096,10 @@ http://www2.fbi.gov/ucr/cius2006/data/table_06.html
 </div>
 </div>
 
-<div class="output_area"><div class="prompt output_prompt">Out[6]:</div>
+<div class="output_area"><div class="prompt output_prompt">Out[7]:</div>
 
 <div class="output_html rendered_html output_subarea output_execute_result">
 <div>
-<style>
-    .dataframe thead tr:only-child th {
-        text-align: right;
-    }
-
-    .dataframe thead th {
-        text-align: left;
-    }
-
-    .dataframe tbody tr th {
-        vertical-align: top;
-    }
-</style>
 <table border="1" class="dataframe">
   <thead>
     <tr style="text-align: right;">
@@ -12472,40 +12176,161 @@ http://www2.fbi.gov/ucr/cius2006/data/table_06.html
       <td>169885</td>
       <td>2016</td>
     </tr>
+  </tbody>
+</table>
+</div>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>The crime csv contains <em>all</em> rows from each report, including rows for each city individually, rows for only the actual raw reports, rows for an estimated 100% reporting, and rows for the estimated report when normalized by MSA population. Each of these row types could be its own dataset and subsequent preprocessing step, but they're saved here in the form they were scraped from the web for maximum compatibility.</p>
+<p>Because it has been uniformly processed and is available to use, use only the population normalized rows.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[8]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># Filter crime data to only use the last preprocessed step available</span>
+<span class="n">norm_rows</span> <span class="o">=</span> <span class="n">all_year_dfs</span><span class="p">[</span><span class="s1">&#39;Counties/principal cities&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;Rate per 100,000 inhabitants&#39;</span>
+<span class="n">all_year_msa_norm</span> <span class="o">=</span> <span class="n">all_year_dfs</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">norm_rows</span><span class="p">,</span> <span class="p">:]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+<span class="n">all_year_msa_norm</span><span class="o">.</span><span class="n">head</span><span class="p">()</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area"><div class="prompt output_prompt">Out[8]:</div>
+
+<div class="output_html rendered_html output_subarea output_execute_result">
+<div>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>Aggravated assault</th>
+      <th>Burglary</th>
+      <th>Counties/principal cities</th>
+      <th>Larceny</th>
+      <th>Motor vehicle theft</th>
+      <th>Murder and nonnegligent manslaughter</th>
+      <th>Population</th>
+      <th>Property crime</th>
+      <th>Rape</th>
+      <th>Robbery</th>
+      <th>Violent crime</th>
+      <th>counties</th>
+      <th>msa_label</th>
+      <th>msa_pop</th>
+      <th>year</th>
+    </tr>
+  </thead>
+  <tbody>
     <tr>
-      <th>3</th>
-      <td>555.0</td>
-      <td>2483.0</td>
-      <td>City of Akron</td>
-      <td>5483.0</td>
-      <td>680.0</td>
-      <td>34.0</td>
-      <td>197257.0</td>
-      <td>8646.0</td>
-      <td>212.0</td>
-      <td>415.0</td>
-      <td>1216.0</td>
+      <th>2</th>
+      <td>227.8</td>
+      <td>649.9</td>
+      <td>Rate per 100,000 inhabitants</td>
+      <td>2077.9</td>
+      <td>175.4</td>
+      <td>6.5</td>
+      <td>NaN</td>
+      <td>2903.1</td>
+      <td>46.5</td>
+      <td>80.6</td>
+      <td>361.4</td>
+      <td>Includes Callahan, Jones, and Taylor Counties</td>
+      <td>Abilene, TX M.S.A.</td>
+      <td>169885</td>
+      <td>2016</td>
+    </tr>
+    <tr>
+      <th>6</th>
+      <td>121.0</td>
+      <td>563.3</td>
+      <td>Rate per 100,000 inhabitants</td>
+      <td>1857.3</td>
+      <td>144.0</td>
+      <td>6.0</td>
+      <td>NaN</td>
+      <td>2564.5</td>
+      <td>48.9</td>
+      <td>77.3</td>
+      <td>253.1</td>
       <td>Includes Portage and Summit Counties</td>
       <td>Akron, OH M.S.A.2</td>
       <td>703561</td>
       <td>2016</td>
     </tr>
     <tr>
-      <th>4</th>
-      <td>833.0</td>
-      <td>3865.0</td>
-      <td>Total area actually reporting</td>
-      <td>12599.0</td>
-      <td>989.0</td>
-      <td>41.0</td>
-      <td>96.2</td>
-      <td>17453.0</td>
-      <td>335.0</td>
-      <td>530.0</td>
-      <td>1739.0</td>
-      <td>Includes Portage and Summit Counties</td>
-      <td>Akron, OH M.S.A.2</td>
-      <td>703561</td>
+      <th>10</th>
+      <td>534.9</td>
+      <td>949.8</td>
+      <td>Rate per 100,000 inhabitants</td>
+      <td>2676.9</td>
+      <td>144.2</td>
+      <td>11.8</td>
+      <td>NaN</td>
+      <td>3770.8</td>
+      <td>28.2</td>
+      <td>159.9</td>
+      <td>734.8</td>
+      <td>Includes Baker, Dougherty, Lee, Terrell, and W...</td>
+      <td>Albany, GA M.S.A.</td>
+      <td>152566</td>
+      <td>2016</td>
+    </tr>
+    <tr>
+      <th>13</th>
+      <td>59.0</td>
+      <td>378.6</td>
+      <td>Rate per 100,000 inhabitants</td>
+      <td>2101.1</td>
+      <td>210.6</td>
+      <td>0.0</td>
+      <td>NaN</td>
+      <td>2690.3</td>
+      <td>27.9</td>
+      <td>27.0</td>
+      <td>113.9</td>
+      <td>Includes Linn County</td>
+      <td>Albany, OR M.S.A.</td>
+      <td>122030</td>
+      <td>2016</td>
+    </tr>
+    <tr>
+      <th>18</th>
+      <td>180.0</td>
+      <td>281.5</td>
+      <td>Rate per 100,000 inhabitants</td>
+      <td>1646.0</td>
+      <td>82.0</td>
+      <td>2.0</td>
+      <td>NaN</td>
+      <td>2009.5</td>
+      <td>38.9</td>
+      <td>68.7</td>
+      <td>289.7</td>
+      <td>Includes Albany, Rensselaer, Saratoga, Schenec...</td>
+      <td>Albany-Schenectady-Troy, NY M.S.A.</td>
+      <td>878166</td>
       <td>2016</td>
     </tr>
   </tbody>
@@ -12524,17 +12349,47 @@ http://www2.fbi.gov/ucr/cius2006/data/table_06.html
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<p>The primary output of the FBI crime data scraping is a <strong>AC209_RawScraped.csv</strong>, a single csv table where all years' data is stored. This is more or less a mirror of all the tables in all the reports, regardless of row type (raw, 100% estimated, or normalized values, Metro/Micro statistical area, etc.)</p>
+<p>Additionally, we also want the raw data for GLM modelling later. Extract the total counts of murder reported for each MSA and add it as well.</p>
 
 </div>
 </div>
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[7]:</div>
+<div class="prompt input_prompt">In&nbsp;[9]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">all_year_dfs</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="s1">&#39;data/derived/AC209_RawScraped.csv&#39;</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s1">&#39;utf_8&#39;</span><span class="p">)</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># all_year_dfs.loc[total_rows, &#39;Murder and nonnegligent manslaughter&#39;].values</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[10]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">total_rows</span> <span class="o">=</span> <span class="n">all_year_dfs</span><span class="p">[</span><span class="s1">&#39;Counties/principal cities&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;Total area actually reporting&#39;</span>
+<span class="n">murder_count</span> <span class="o">=</span> <span class="n">all_year_dfs</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">total_rows</span><span class="p">,</span> <span class="s1">&#39;Murder and nonnegligent manslaughter&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span>
+<span class="n">all_year_msa_norm</span><span class="o">.</span><span class="n">loc</span><span class="p">[:,</span> <span class="s1">&#39;Murder_count&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">murder_count</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[11]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># Clean &quot;M.S.A&quot; and footnotes from scraped data</span>
+<span class="n">msa_label_strip</span> <span class="o">=</span> <span class="n">all_year_msa_norm</span><span class="p">[</span><span class="s1">&#39;msa_label&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39; M\.S\.A\.[\d\,\ ]*$&#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">)</span>
+<span class="n">all_year_msa_norm</span><span class="o">.</span><span class="n">loc</span><span class="p">[:,</span> <span class="s1">&#39;msa_label_strip&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">msa_label_strip</span>
 </pre></div>
 
 </div>
@@ -12547,10 +12402,356 @@ http://www2.fbi.gov/ucr/cius2006/data/table_06.html
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<p>Now that we have the crime dataframe ready in a usable format, we can gather the American Community Survey data, merge them into one dataframe, and proceed with our analyses.</p>
+<p>Some the MSA labels contain a number after the state abbreviation: e.g. 'Akron, OH2'. This is fixed with a regex replacement like the M.S.A. above.</p>
+<p>Be sure that the Year and MSA label match for both the demographics from the ACS and the scraped Crime data.</p>
 
 </div>
 </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h1 id="Part-3---Merge-ACS-and-FBI-data">Part 3 - Merge ACS and FBI data<a class="anchor-link" href="#Part-3---Merge-ACS-and-FBI-data">&#182;</a></h1>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[12]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="c1">#merge the two tables where MSA names and year match</span>
+<span class="c1">#that is, each MSA-year is a different row in the final table, so Albany2016 and Albany2017 are considered different trials</span>
+<span class="n">dem_df_merged</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span><span class="n">left</span><span class="o">=</span><span class="n">all_year_msa_norm</span><span class="p">,</span> <span class="n">left_on</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;msa_label_strip&#39;</span><span class="p">,</span> <span class="s1">&#39;year&#39;</span><span class="p">],</span>
+                         <span class="n">right</span><span class="o">=</span><span class="n">dem_df</span><span class="p">,</span> <span class="n">right_on</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;MSA&#39;</span><span class="p">,</span> <span class="s1">&#39;year&#39;</span><span class="p">],</span> <span class="n">how</span><span class="o">=</span><span class="s1">&#39;inner&#39;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">dem_df_merged</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+<span class="n">dem_df_merged</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area"><div class="prompt"></div>
+<div class="output_subarea output_stream output_stdout output_text">
+<pre>(3283, 564)
+</pre>
+</div>
+</div>
+
+<div class="output_area"><div class="prompt output_prompt">Out[12]:</div>
+
+<div class="output_html rendered_html output_subarea output_execute_result">
+<div>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>Aggravated assault</th>
+      <th>Burglary</th>
+      <th>Counties/principal cities</th>
+      <th>Larceny</th>
+      <th>Motor vehicle theft</th>
+      <th>Murder and nonnegligent manslaughter</th>
+      <th>Population</th>
+      <th>Property crime</th>
+      <th>Rape</th>
+      <th>Robbery</th>
+      <th>...</th>
+      <th>Percent; YEAR STRUCTURE BUILT - Total housing units - Built 1939 or earlier</th>
+      <th>Percent; YEAR STRUCTURE BUILT - Total housing units - Built 1940 to 1949</th>
+      <th>Percent; YEAR STRUCTURE BUILT - Total housing units - Built 1950 to 1959</th>
+      <th>Percent; YEAR STRUCTURE BUILT - Total housing units - Built 1960 to 1969</th>
+      <th>Percent; YEAR STRUCTURE BUILT - Total housing units - Built 1970 to 1979</th>
+      <th>Percent; YEAR STRUCTURE BUILT - Total housing units - Built 1980 to 1989</th>
+      <th>Percent; YEAR STRUCTURE BUILT - Total housing units - Built 1990 to 1999</th>
+      <th>Percent; YEAR STRUCTURE BUILT - Total housing units - Built 2000 to 2009</th>
+      <th>Percent; YEAR STRUCTURE BUILT - Total housing units - Built 2010 to 2013</th>
+      <th>Percent; YEAR STRUCTURE BUILT - Total housing units - Built 2014 or later</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>227.8</td>
+      <td>649.9</td>
+      <td>Rate per 100,000 inhabitants</td>
+      <td>2077.9</td>
+      <td>175.4</td>
+      <td>6.5</td>
+      <td>NaN</td>
+      <td>2903.1</td>
+      <td>46.5</td>
+      <td>80.6</td>
+      <td>...</td>
+      <td>9.5</td>
+      <td>8.4</td>
+      <td>18.6</td>
+      <td>11.1</td>
+      <td>15.0</td>
+      <td>15.5</td>
+      <td>8.6</td>
+      <td>9.3</td>
+      <td>2.6</td>
+      <td>1.5</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>121.0</td>
+      <td>563.3</td>
+      <td>Rate per 100,000 inhabitants</td>
+      <td>1857.3</td>
+      <td>144.0</td>
+      <td>6.0</td>
+      <td>NaN</td>
+      <td>2564.5</td>
+      <td>48.9</td>
+      <td>77.3</td>
+      <td>...</td>
+      <td>19.0</td>
+      <td>7.2</td>
+      <td>14.9</td>
+      <td>11.6</td>
+      <td>13.9</td>
+      <td>9.1</td>
+      <td>12.9</td>
+      <td>9.4</td>
+      <td>1.5</td>
+      <td>0.6</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>534.9</td>
+      <td>949.8</td>
+      <td>Rate per 100,000 inhabitants</td>
+      <td>2676.9</td>
+      <td>144.2</td>
+      <td>11.8</td>
+      <td>NaN</td>
+      <td>3770.8</td>
+      <td>28.2</td>
+      <td>159.9</td>
+      <td>...</td>
+      <td>6.2</td>
+      <td>3.2</td>
+      <td>9.7</td>
+      <td>14.0</td>
+      <td>15.2</td>
+      <td>15.4</td>
+      <td>17.0</td>
+      <td>16.9</td>
+      <td>1.9</td>
+      <td>0.3</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>59.0</td>
+      <td>378.6</td>
+      <td>Rate per 100,000 inhabitants</td>
+      <td>2101.1</td>
+      <td>210.6</td>
+      <td>0.0</td>
+      <td>NaN</td>
+      <td>2690.3</td>
+      <td>27.9</td>
+      <td>27.0</td>
+      <td>...</td>
+      <td>10.9</td>
+      <td>8.6</td>
+      <td>8.7</td>
+      <td>9.7</td>
+      <td>20.9</td>
+      <td>7.9</td>
+      <td>16.8</td>
+      <td>12.9</td>
+      <td>2.5</td>
+      <td>1.1</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>180.0</td>
+      <td>281.5</td>
+      <td>Rate per 100,000 inhabitants</td>
+      <td>1646.0</td>
+      <td>82.0</td>
+      <td>2.0</td>
+      <td>NaN</td>
+      <td>2009.5</td>
+      <td>38.9</td>
+      <td>68.7</td>
+      <td>...</td>
+      <td>29.8</td>
+      <td>5.9</td>
+      <td>9.8</td>
+      <td>8.9</td>
+      <td>11.3</td>
+      <td>12.1</td>
+      <td>9.6</td>
+      <td>8.9</td>
+      <td>2.8</td>
+      <td>0.9</td>
+    </tr>
+    <tr>
+      <th>5</th>
+      <td>596.7</td>
+      <td>951.1</td>
+      <td>Rate per 100,000 inhabitants</td>
+      <td>3319.6</td>
+      <td>1018.0</td>
+      <td>8.3</td>
+      <td>NaN</td>
+      <td>5288.7</td>
+      <td>57.3</td>
+      <td>238.7</td>
+      <td>...</td>
+      <td>2.8</td>
+      <td>3.7</td>
+      <td>9.2</td>
+      <td>10.0</td>
+      <td>18.1</td>
+      <td>16.4</td>
+      <td>19.0</td>
+      <td>17.3</td>
+      <td>2.1</td>
+      <td>1.3</td>
+    </tr>
+    <tr>
+      <th>6</th>
+      <td>748.5</td>
+      <td>1271.2</td>
+      <td>Rate per 100,000 inhabitants</td>
+      <td>3111.7</td>
+      <td>314.9</td>
+      <td>7.8</td>
+      <td>NaN</td>
+      <td>4697.7</td>
+      <td>50.0</td>
+      <td>116.9</td>
+      <td>...</td>
+      <td>5.2</td>
+      <td>8.0</td>
+      <td>15.0</td>
+      <td>12.4</td>
+      <td>16.8</td>
+      <td>12.3</td>
+      <td>12.6</td>
+      <td>11.3</td>
+      <td>5.0</td>
+      <td>1.3</td>
+    </tr>
+    <tr>
+      <th>7</th>
+      <td>NaN</td>
+      <td>264.7</td>
+      <td>Rate per 100,000 inhabitants</td>
+      <td>NaN</td>
+      <td>89.1</td>
+      <td>2.6</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>19.4</td>
+      <td>58.3</td>
+      <td>...</td>
+      <td>24.8</td>
+      <td>5.8</td>
+      <td>11.6</td>
+      <td>10.2</td>
+      <td>12.1</td>
+      <td>10.4</td>
+      <td>10.7</td>
+      <td>11.6</td>
+      <td>2.0</td>
+      <td>0.9</td>
+    </tr>
+    <tr>
+      <th>8</th>
+      <td>143.3</td>
+      <td>190.5</td>
+      <td>Rate per 100,000 inhabitants</td>
+      <td>1124.5</td>
+      <td>44.0</td>
+      <td>0.8</td>
+      <td>NaN</td>
+      <td>1359.0</td>
+      <td>32.0</td>
+      <td>36.8</td>
+      <td>...</td>
+      <td>31.1</td>
+      <td>7.0</td>
+      <td>11.4</td>
+      <td>11.3</td>
+      <td>14.9</td>
+      <td>6.8</td>
+      <td>8.3</td>
+      <td>7.5</td>
+      <td>1.4</td>
+      <td>0.2</td>
+    </tr>
+    <tr>
+      <th>9</th>
+      <td>413.7</td>
+      <td>761.3</td>
+      <td>Rate per 100,000 inhabitants</td>
+      <td>2781.3</td>
+      <td>390.2</td>
+      <td>5.3</td>
+      <td>NaN</td>
+      <td>3932.8</td>
+      <td>71.4</td>
+      <td>102.2</td>
+      <td>...</td>
+      <td>5.7</td>
+      <td>6.5</td>
+      <td>17.4</td>
+      <td>18.2</td>
+      <td>14.4</td>
+      <td>11.6</td>
+      <td>7.9</td>
+      <td>12.7</td>
+      <td>4.7</td>
+      <td>1.0</td>
+    </tr>
+  </tbody>
+</table>
+<p>10 rows × 564 columns</p>
+</div>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>The intermediate outcome of the Demographics Merge is a combined demographics table with all downloaded demographic tables concatenated horizontally (column-wise) each year <strong>allDem_df.csv</strong>.</p>
+<p>The primary outcome of the DemographicsMerge is <strong>crime_ACS_merged.csv</strong>, a concatenated sheet with normalized crime statistics, where each row contains data for all crime and demographics for one MSA/year (e.g. 'Abilene TX', '2006')</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[13]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">dem_df_merged</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="s1">&#39;data/derived/crime_ACS_merged.csv&#39;</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
